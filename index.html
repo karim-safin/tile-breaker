@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv = "Content-Type" content = "text/html" charset = "UTF-8">
+  <title>Tile breaker</title>
+  <link rel="stylesheet" type="text/css" href="style.css">
+  <script type = "text/javascript" src = "logic.js"></script>
+</head>
+<body onresize="onResize()">
+    <div id="scoreDiv" class = "score">Score: 0</div>
+    <canvas id="mainCanvas"
+            onclick="onMouseClick(event)"
+            class = "canvas"></canvas>
+    </br>
+    <button id = "newGameButton" onclick="setupGame()" class = "newGameButton">New game</button> 
+    <script type="text/javascript">
+        onResize();
+        setupGame();
+    </script>
+</body>
+</html>

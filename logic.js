@@ -346,6 +346,8 @@ function setCanvasSize(width, height) {
     var canvas = document.getElementById("mainCanvas");
     width = Math.floor(width);
     height = Math.floor(height);
+    width = width - width % gameSize; // now width is divisible by gameSize
+    height = height - height % gameSize; // the same with height
     canvas.width = width;
     canvas.height = height;
 }

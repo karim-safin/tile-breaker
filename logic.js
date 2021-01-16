@@ -16,6 +16,112 @@ var colorsCount = 5;
 var colors = ["white", "#e6194b", "#0082c8", "#3cb44b", "#ffe119", "#f58231"]
 
 /**
+ * Checks whether the given coordiantes are inside the game field
+ */
+function isInBoundaries(row, column) {
+    return    row >= 0
+           && row < gameSize
+           && column >= 0
+           && column < gameSize;
+}
+
+/**
+ * A hash function on coordinates inside the game field.
+ * Returns a positive value for coordinates that are inside the field and 0 for
+ * other coordinates.
+ * Will return unique values for all the coordinates inside game field.
+ */
+function hashCoordinates(i, j) {
+	if (!isInBoundaries(i, j)) {
+		return 0;
+	}
+	return i * gameSize + j + 1;
+}
+
+/**
+ * A tile of TileBreaker game
+ */
+class Tile {
+	constructor(i, j, color) {
+		this.i = i;
+		this.j = j;
+		this.color = color;
+	}
+
+	hash() {
+		return hashCoordinates(this.i, this.j);
+	}
+
+	/**
+	 * Constructs a random tile at a given position
+	 */
+	static randomTileAt(i, j) {
+		var randomColor = Math.floor((Math.random() * colorsCount) + 1);
+		return new Tile(i, j, randomColor);
+	}
+
+	/**
+	 * Checks whether this tile is the same color of another one
+	 */
+	equalTo(otherTile) {
+		if (otherTile == undefined) {
+			return false;
+		}
+		return this.color == otherTile.color;
+	}
+}
+
+/**
+ * A set of tiles on a game field that supports operations on multiple tiles
+ */
+class TileSet {
+	constructor() {
+		this.tiles = new Map();
+	}
+
+	addTile(tile) {
+		this.tiles.set(tile.hash(), tile);
+	}
+
+	/**
+     * Fills a given column with random tiles
+     */
+    randomFillColumn(column) {
+        if (!isInBoundaries(0, column)) {
+            return;
+        }
+        for (var i = 0; i < gameSize; ++i) {
+        	this.addTile(Tile.randomTileAt(i, column));
+        }
+    }
+
+    getTileAt(i, j) {
+    	return this.tiles.get(hashCoordinates(i, j));
+    }
+
+    removeTileAt(i, j) {
+    	if (!this.hasTileAt(i, j)) {
+    		return;
+    	}
+    	this.tiles.delete(hashCoordinates(i, j));
+    }
+
+    hasTileAt(i, j) {
+    	return this.tiles.has(hashCoordinates(i, j));
+    }
+
+    moveTileDown(i, j) {
+    	if (!this.hasTileAt(i, j)) {
+    		return;
+    	}
+    	var tileToMove = this.getTileAt(i, j);
+    	this.removeTileAt(i, j);
+    	tileToMove.i = tileToMove.i - 1;
+    	this.addTile(tileToMove);
+    }
+}
+
+/**
  * A class that represents a game state. The game state is a 2-d array of size
  * n x n, whose cells have integers in them. 0 denotes an empty cell, 1-5 means
  * that a cell contains a tile of color 1-5 respectively. This game knows the
@@ -30,11 +136,13 @@ class Game {
         this.score = 0;
         this.width = w;
         this.state = new Array(this.width);
+        this.tileSet = new TileSet();
         for (var i = 0; i < this.width; ++i) {
             this.state[i] = new Array(this.width);
         }
         for (var i = 0; i < this.width; ++i) {
-            this.randomFillColumn(i);
+            this.randomFillColumn(i); // TODO: delete after testing tileSet
+            this.tileSet.randomFillColumn(i);
         }
     }
 
@@ -49,7 +157,7 @@ class Game {
      * Fills a given column with random non-empty tiles
      */
     randomFillColumn(column) {
-        if (!this.isInBoundaries(0, column)) {
+        if (!isInBoundaries(0, column)) {
             return;
         }
         for (var i = 0; i < this.width; ++i) {
@@ -61,7 +169,7 @@ class Game {
      * Returns the number of the color in the cell [row][column]
      */
     getColor(row, column) {
-        if (!this.isInBoundaries(row, column)) {
+        if (!isInBoundaries(row, column)) {
             return 0;
         }
         return this.state[row][column];
@@ -71,20 +179,10 @@ class Game {
      * Returns true if the cell [row][column] is empty
      */
     isEmpty(row, column) {
-        if (!this.isInBoundaries(row, column)) {
+        if (!isInBoundaries(row, column)) {
             return true;
         }
         return this.state[row][column] == 0;
-    }
-
-    /**
-     * Checks whether the given coordiantes are inside the game field
-     */
-    isInBoundaries(row, column) {
-        return    row >= 0
-               && row < this.width
-               && column >= 0
-               && column < this.width;
     }
 
     /**
@@ -92,19 +190,21 @@ class Game {
      * the cell in the given coordinates is not empty and has at least one
      * neighbour that has the same color.
      */
-    isValidMove(row, column) {
-        if (!this.isInBoundaries(row, column)) {
+    isValidMoveNew(row, column) {
+        if (!isInBoundaries(row, column)) {
             return false;
         }
-        if (this.isEmpty(row, column)) {
+        if (!this.tileSet.hasTileAt(row, column)) {
             return false;
         }
         var dx = [1, 0, -1, 0];
         var dy = [0, 1, 0, -1];
+        let thisTile = this.tileSet.getTileAt(row, column);
         for (var i = 0; i < 4; ++i) {
             // if the given cell's i'th neighbour has the same color as this
             // cell, then this move is valid
-            if (this.getColor(row, column) == this.getColor(row + dx[i], column + dy[i])) {
+            var neighbourTile = this.tileSet.getTileAt(row + dx[i], column + dy[i]);
+            if (thisTile.equalTo(neighbourTile)) {
                 return true;
             }
         }
@@ -113,19 +213,11 @@ class Game {
         return false;
     }
 
-    /**
-     * If the move in the cell (i, j) is valid, remove the whole chunk of cells
-     * of the same color with (i, j). The removed cells become empty. After that
-     * some cells will fall down. After that, some columns may become empty. In
-     * this case, the rows are shifted from right to left. Finally, if some rows
-     * were shifted, this number adds to the player's score and the rightmost
-     * empty rows become filled with random tiles.
-     */
-    performMove(i, j) {
-        if (!this.isValidMove(i, j)) {
+    performMoveNew(i, j) {
+    	if (!this.isValidMoveNew(i, j)) {
             return;
         }
-        var thisColor = this.getColor(i, j);
+        var thisTile = this.tileSet.getTileAt(i, j);
         // we know that the move is valid, so perform a depth-first search to
         // remove the adjacent cells with the same color.
         var stack = [[i, j]];
@@ -146,9 +238,10 @@ class Game {
             for (var i = 0; i < 4; ++i) {
                 var ni = ci + dx[i]; // neighbour i
                 var nj = cj + dy[i]; // neighbour j
-                if (   this.isInBoundaries(ni, nj)
+                var neighbourTile = this.tileSet.getTileAt(ni, nj);
+                if (   isInBoundaries(ni, nj)
                     && !visited[ni][nj] 
-                    && this.getColor(ni, nj) == thisColor) {
+                    && thisTile.equalTo(neighbourTile)) {
                     stack.push([ni, nj]);
                 }
             }
@@ -157,29 +250,29 @@ class Game {
         for (var i = 0; i < this.width; ++i) {
             for (var j = 0; j < this.width; ++j) {
                 if (visited[i][j]) {
-                    this.state[i][j] = 0;
+                	this.tileSet.removeTileAt(i, j);
                 }
             }
         }
         // Now some tiles may fall down
-        this.fallDown();
+        this.fallDownNew();
         // Now some columns may shift from right to left
-        this.fallLeft();
+        this.fallLeftNew();
         // Now there are some empty columns. They were cleared as a result of
         // this move. We have to add their number to the player's score
-        this.score = this.score + this.emptyColumnsCount();
+        this.score = this.score + this.emptyColumnsCountNew();
         // And finally, the newly-cleared columns have to be filled with random
         // tiles.
-        this.randomFillEmptyColumns();
+        this.randomFillEmptyColumnsNew();
     }
 
     /**
      * If some tiles are "hanging in the air" (have an empty cell beneath them),
      * then they have to fall down. This function does this for every column.
      */
-    fallDown() {
+    fallDownNew() {
         for (var i = 0; i < this.width; ++i) {
-            this.fallDownColumn(i);
+            this.fallDownColumnNew(i);
         }
     }
 
@@ -189,14 +282,12 @@ class Game {
      * move to that empty cell. If after that some cells can be fallen down,
      * they will also "float" to the bottom
      */
-    fallDownColumn(column) {
+    fallDownColumnNew(column) {
         for (var i = 0; i < this.width; ++i) {
             for (var j = this.width - 1; j >= 1; --j) {
-                if (   !this.isEmpty(j, column)
-                    &&  this.isEmpty(j - 1, column)) {
-                    var hold = this.state[j][column];
-                    this.state[j][column] = this.state[j - 1][column];
-                    this.state[j - 1][column] = hold;
+                if (    this.tileSet.hasTileAt(j, column)
+                    &&  !this.tileSet.hasTileAt(j - 1, column)) {
+                	this.tileSet.moveTileDown(j, column);
                 }
             }
         }
@@ -206,12 +297,12 @@ class Game {
      * If there are some empty columns, they will shift to the left, so that
      * after performing this operation only the righrmost columns will be empty
      */
-    fallLeft() {
+    fallLeftNew() {
         for (var i = 0; i < this.width; ++i) {
             for (var j = this.width - 1; j >= 1; --j) {
-                if (   !this.isColumnEmpty(j)
-                    &&  this.isColumnEmpty(j - 1)) {
-                    this.swapColumns(j, j - 1);
+                if (   !this.isColumnEmptyNew(j)
+                    &&  this.isColumnEmptyNew(j - 1)) {
+                    this.swapColumnsNew(j, j - 1);
                 }
             }
         }
@@ -220,20 +311,30 @@ class Game {
     /**
      * Swaps the two columns element-wise
      */
-    swapColumns(col1, col2) {
+    swapColumnsNew(col1, col2) {
         for (var i = 0; i < this.width; ++i) {
-            var            hold = this.state[i][col1];
-            this.state[i][col1] = this.state[i][col2];
-            this.state[i][col2] = hold;
+            var t1 = this.tileSet.getTileAt(i, col1);
+            var t2 = this.tileSet.getTileAt(i, col2);
+            this.tileSet.removeTileAt(i, col1);
+            this.tileSet.removeTileAt(i, col2);
+            if (typeof t1 !== "undefined") {
+                t1.j = col2;
+                this.tileSet.addTile(t1);
+            }
+            if (typeof t2 !== "undefined") {
+                t2.j = col1;
+                this.tileSet.addTile(t2);
+            }
         }
     }
+
     /**
      * Returns true if there is at least one non-empty cell in this column and
      * false otherwise
      */
-    isColumnEmpty(column) {
+    isColumnEmptyNew(column) {
         for (var i = 0; i < this.width; ++i) {
-            if (this.state[i][column] != 0) {
+            if (this.tileSet.hasTileAt(i, column)) {
                 return false;
             }
         }
@@ -243,23 +344,23 @@ class Game {
     /**
      * Returns the number of columns without non-empty tiles
      */
-    emptyColumnsCount() {
-        var cnt = 0;
+	emptyColumnsCountNew() {
+		var cnt = 0;
         for (var i = 0; i < this.width; ++i) {
-            if (this.isColumnEmpty(i)) {
+            if (this.isColumnEmptyNew(i)) {
                 cnt = cnt + 1;
             }
         }
         return cnt;
-    }
+	}
 
     /**
      * Fills all the empty columns with random tiles
      */
-    randomFillEmptyColumns() {
+    randomFillEmptyColumnsNew() {
         for (var i = 0; i < this.width; ++i) {
-            if (this.isColumnEmpty(i)) {
-                this.randomFillColumn(i);
+            if (this.isColumnEmptyNew(i)) {
+                this.tileSet.randomFillColumn(i);
             }
         }
     }
@@ -270,13 +371,17 @@ class Game {
     hasValidMoves() {
         for (var i = 0; i < this.width; ++i) {
             for (var j = 0; j < this.width; ++j) {
-                if (  !this.isEmpty(i, j)) {
-                    if (this.getColor(i, j) == this.getColor(i + 1, j)) {
-                        return true;
-                    }
-                    if (this.getColor(i, j) == this.getColor(i, j + 1)) {
-                        return true;
-                    }
+                var t0 = this.tileSet.getTileAt(i, j);
+                if (typeof t0 == "undefined") {
+                    continue;
+                }
+                var t1 = this.tileSet.getTileAt(i + 1, j);
+                if (t0.equalTo(t1)) {
+                    return true;
+                }
+                var t2 = this.tileSet.getTileAt(i, j + 1);
+                if (t0.equalTo(t2)) {
+                    return true;
                 }
             }
         }
@@ -285,23 +390,22 @@ class Game {
 }
 
 /**
- * Draws a cell at [row][column] location in the game with a given size
+ * Draws an object of a Tile class
  */
-function drawCell(context, row, column, size) {
-    var currentCellColor = game.getColor(game.width - 1 - row, column);
+function drawTile(context, tile, size) {
+	var currentCellColor = tile.color;
     context.fillStyle = colors[currentCellColor];
-    context.fillRect(column * size, row * size, size, size);
+    context.fillRect(tile.j * size, (gameSize - 1 - tile.i) * size, size, size);
 }
 
 function drawGame() {
     var c = document.getElementById("mainCanvas");
     var ctx = c.getContext("2d");
     var cellSize = c.width / gameSize;
-    for (var i = 0; i < game.width; ++i) {
-        for (var j = 0; j < game.width; ++j) {
-
-            drawCell(ctx, i, j, cellSize);
-        }
+    ctx.fillStyle = colors[0];
+    ctx.fillRect(0, 0, cellSize * 10, cellSize * 10);
+    for (tile of game.tileSet.tiles.values()) {
+    	drawTile(ctx, tile, cellSize);
     }
     var scoreDiv = document.getElementById("scoreDiv");
     scoreDiv.innerHTML = "Score: " + game.score;
@@ -313,6 +417,11 @@ function drawGame() {
 function setupGame() {
     game = new Game(gameSize);
     drawGame();
+}
+
+function initialize() {
+	var c = document.getElementById("mainCanvas");
+    var ctx = c.getContext("2d");
 }
 
 function gameEndMessage() {
@@ -332,9 +441,10 @@ function onMouseClick(event) {
     var cellSize = c.width / gameSize;
     x = Math.floor(x / cellSize);
     y = Math.floor(y / cellSize);
-    y = game.width - 1 - y;
-    if (game.isValidMove(y, x)) {
-        game.performMove(y, x);
+    y = gameSize - 1 - y;
+    console.log([x, y]);
+    if (game.isValidMoveNew(y, x)) {
+        game.performMoveNew(y, x);
         drawGame();
         if (!game.hasValidMoves()) {
             gameEndMessage();
